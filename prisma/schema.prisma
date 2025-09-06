@@ -1,0 +1,1687 @@
+// ExitMatch Database Schema - M&A Platform for UK SMEs
+// This schema implements a comprehensive database architecture for managing
+// business acquisitions, valuations, deal rooms, and secure transactions.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch", "fullTextIndex"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// AUTHENTICATION & USER MANAGEMENT
+// ============================================================================
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  ipAddress    String?
+  userAgent    String?
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expires])
+}
+
+model User {
+  id                    String                 @id @default(cuid())
+  email                 String                 @unique
+  emailVerified         DateTime?
+  name                  String?
+  image                 String?
+  password              String?                // For credentials authentication
+  role                  UserRole               @default(BUYER)
+  status                UserStatus             @default(ACTIVE)
+  twoFactorEnabled      Boolean                @default(false)
+  twoFactorSecret       String?
+  lastLoginAt           DateTime?
+  loginAttempts         Int                    @default(0)
+  lockedUntil           DateTime?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  deletedAt             DateTime?              // Soft delete for GDPR
+  
+  // Relations
+  accounts              Account[]
+  sessions              Session[]
+  sellerProfile         SellerProfile?
+  buyerProfile          BuyerProfile?
+  advisorProfile        AdvisorProfile?
+  businessesForSale     Business[]             @relation("Seller")
+  messages              Message[]
+  notifications         Notification[]
+  savedSearches         SavedSearch[]
+  favoriteListings      FavoriteListing[]
+  inquiries             Inquiry[]
+  valuationRequests     ValuationRequest[]
+  dealRoomAccess        DealRoomAccess[]
+  documentAccess        DocumentAccess[]
+  activityLogs          ActivityLog[]
+  sentMessages          DirectMessage[]        @relation("SentMessages")
+  receivedMessages      DirectMessage[]        @relation("ReceivedMessages")
+  matchesAsBuyer        Match[]                @relation("BuyerMatches")
+  matchesAsSeller       Match[]                @relation("SellerMatches")
+  ndaSigned             NDASignature[]
+  reviews               Review[]               @relation("ReviewAuthor")
+  reviewsReceived       Review[]               @relation("ReviewTarget")
+  subscriptions         Subscription[]
+  payments              Payment[]
+  auditLogs             AuditLog[]
+
+  @@index([email])
+  @@index([role])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@index([expires])
+}
+
+enum UserRole {
+  ADMIN
+  SELLER
+  BUYER
+  ADVISOR
+  BROKER
+  INVESTOR
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+// ============================================================================
+// USER PROFILES
+// ============================================================================
+
+model SellerProfile {
+  id                    String                @id @default(cuid())
+  userId                String                @unique
+  companyName           String?
+  companyNumber         String?               // UK Companies House number
+  vatNumber             String?
+  position              String?
+  yearsInBusiness       Int?
+  exitTimeframe         String?               // e.g., "3-6 months", "1 year"
+  sellingReason         String?               @db.Text
+  involvementPostSale   String?               // Stay on, advisory, complete exit
+  verified              Boolean               @default(false)
+  verifiedAt            DateTime?
+  verificationDocuments String[]
+  rating                Decimal?              @db.Decimal(3, 2)  // Average rating 0-5
+  totalDeals            Int                   @default(0)
+  successfulDeals       Int                   @default(0)
+  
+  // Contact preferences
+  preferredContactMethod String?              // email, phone, platform
+  availableTimes        Json?                // Structured availability data
+  timezone              String?
+  
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  
+  user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([verified])
+  @@index([companyNumber])
+}
+
+model BuyerProfile {
+  id                    String                @id @default(cuid())
+  userId                String                @unique
+  buyerType             BuyerType
+  investmentEntity      String?               // Company or fund name
+  industries            String[]              // Array of interested industries
+  minBudget             Decimal?              @db.Decimal(15, 2)
+  maxBudget             Decimal?              @db.Decimal(15, 2)
+  preferredLocations    String[]              // UK regions/cities
+  minRevenue            Decimal?              @db.Decimal(15, 2)
+  maxRevenue            Decimal?              @db.Decimal(15, 2)
+  minEbitda             Decimal?              @db.Decimal(15, 2)
+  maxEbitda             Decimal?              @db.Decimal(15, 2)
+  timeframe             String?               // Acquisition timeframe
+  acquisitionExperience String?               @db.Text
+  financingType         FinancingType?
+  financingApproved     Boolean               @default(false)
+  proofOfFunds          String?               // Document URL
+  businessPlan          String?               @db.Text
+  synergies             String?               @db.Text  // Looking for synergies
+  
+  // Verification
+  verified              Boolean               @default(false)
+  verifiedAt            DateTime?
+  kycCompleted          Boolean               @default(false)
+  kycCompletedAt        DateTime?
+  amlChecked            Boolean               @default(false)
+  amlCheckedAt          DateTime?
+  
+  // Performance metrics
+  rating                Decimal?              @db.Decimal(3, 2)
+  totalInquiries        Int                   @default(0)
+  totalOffers           Int                   @default(0)
+  successfulDeals       Int                   @default(0)
+  
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  
+  user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([buyerType])
+  @@index([verified])
+  @@index([minBudget, maxBudget])
+}
+
+model AdvisorProfile {
+  id                    String                @id @default(cuid())
+  userId                String                @unique
+  firmName              String
+  firmWebsite           String?
+  licenseNumber         String?               // Professional license
+  specializations       String[]              // M&A, valuation, legal, etc.
+  industries            String[]              // Industry expertise
+  qualifications        String[]              // Professional qualifications
+  yearsExperience       Int
+  dealsCompleted        Int                   @default(0)
+  typicalDealSize       String?               // e.g., "£1M-£5M"
+  hourlyRate            Decimal?              @db.Decimal(10, 2)
+  successFee            Decimal?              @db.Decimal(5, 2)  // Percentage
+  bio                   String                @db.Text
+  linkedinUrl           String?
+  
+  // Verification & Compliance
+  verified              Boolean               @default(false)
+  verifiedAt            DateTime?
+  insuranceCoverage     Decimal?              @db.Decimal(15, 2)
+  insuranceExpiry       DateTime?
+  regulatoryBody        String?               // FCA, SRA, etc.
+  
+  // Performance
+  rating                Decimal?              @db.Decimal(3, 2)
+  totalClients          Int                   @default(0)
+  activeClients         Int                   @default(0)
+  
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  
+  user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dealRooms             DealRoom[]            @relation("AdvisorDealRooms")
+
+  @@index([verified])
+  @@index([firmName])
+}
+
+enum BuyerType {
+  INDIVIDUAL
+  STRATEGIC_BUYER
+  FINANCIAL_BUYER
+  PRIVATE_EQUITY
+  FAMILY_OFFICE
+  COMPETITOR
+  MANAGEMENT_BUYOUT
+  EMPLOYEE_BUYOUT
+}
+
+enum FinancingType {
+  CASH
+  BANK_LOAN
+  SBA_LOAN
+  SELLER_FINANCING
+  INVESTOR_BACKED
+  COMBINATION
+}
+
+// ============================================================================
+// BUSINESS & LISTINGS
+// ============================================================================
+
+model Business {
+  id                    String                @id @default(cuid())
+  sellerId              String
+  referenceCode         String                @unique  // Unique business reference
+  
+  // Basic Information
+  title                 String
+  description           String                @db.Text
+  executiveSummary      String?               @db.Text
+  confidentialName      String?               // Name shown before NDA
+  slug                  String                @unique
+  
+  // Financial Information
+  askingPrice           Decimal?              @db.Decimal(15, 2)
+  minimumPrice          Decimal?              @db.Decimal(15, 2)  // Internal minimum
+  annualRevenue         Decimal?              @db.Decimal(15, 2)
+  annualProfit          Decimal?              @db.Decimal(15, 2)
+  ebitda                Decimal?              @db.Decimal(15, 2)
+  grossMargin           Decimal?              @db.Decimal(5, 2)   // Percentage
+  netMargin             Decimal?              @db.Decimal(5, 2)   // Percentage
+  cashFlow              Decimal?              @db.Decimal(15, 2)
+  inventory             Decimal?              @db.Decimal(15, 2)
+  accounts              Decimal?              @db.Decimal(15, 2)
+  debt                  Decimal?              @db.Decimal(15, 2)
+  
+  // Business Details
+  industry              String
+  subIndustry           String?
+  sicCode               String?               // Standard Industrial Classification
+  location              String                // Primary location
+  locations             String[]              // All locations
+  website               String?
+  employees             Int?
+  yearEstablished       Int?
+  legalStructure        LegalStructure?
+  propertyIncluded      Boolean               @default(false)
+  propertyValue         Decimal?              @db.Decimal(15, 2)
+  stockValue            Decimal?              @db.Decimal(15, 2)
+  fixtures              Decimal?              @db.Decimal(15, 2)
+  
+  // Sale Details
+  reasonForSelling      String?               @db.Text
+  sellingPoints         String[]              // Key selling points
+  growthOpportunities   String?               @db.Text
+  competition           String?               @db.Text
+  relocatable           Boolean               @default(false)
+  franchiseOpportunity  Boolean               @default(false)
+  managementStaying     Boolean               @default(false)
+  trainingProvided      Boolean               @default(true)
+  trainingPeriod        String?               // e.g., "3 months"
+  
+  // Listing Management
+  status                ListingStatus         @default(DRAFT)
+  listingType           ListingType           @default(STANDARD)
+  featured              Boolean               @default(false)
+  featuredUntil         DateTime?
+  confidential          Boolean               @default(true)
+  ndaRequired           Boolean               @default(true)
+  
+  // Metrics
+  viewCount             Int                   @default(0)
+  uniqueViewCount       Int                   @default(0)
+  inquiryCount          Int                   @default(0)
+  favoriteCount         Int                   @default(0)
+  
+  // Dates
+  publishedAt           DateTime?
+  expiresAt             DateTime?
+  soldAt                DateTime?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  deletedAt             DateTime?             // Soft delete
+  
+  // Relations
+  seller                User                  @relation("Seller", fields: [sellerId], references: [id])
+  financials            FinancialData[]
+  documents             Document[]
+  images                BusinessImage[]
+  inquiries             Inquiry[]
+  favoriteListings      FavoriteListing[]
+  valuations            Valuation[]
+  matches               Match[]
+  dealRooms             DealRoom[]
+  ndaSignatures         NDASignature[]
+  businessMetrics       BusinessMetric[]
+  keywords              BusinessKeyword[]
+  
+  // Full-text search
+  @@index([sellerId])
+  @@index([status])
+  @@index([industry])
+  @@index([location])
+  @@index([askingPrice])
+  @@index([annualRevenue])
+  @@index([ebitda])
+  @@index([yearEstablished])
+  @@index([referenceCode])
+  @@index([slug])
+  @@index([deletedAt])
+}
+
+model BusinessMetric {
+  id                    String                @id @default(cuid())
+  businessId            String
+  metricType            String                // revenue_growth, customer_retention, etc.
+  value                 Decimal               @db.Decimal(15, 2)
+  unit                  String?               // %, £, units, etc.
+  period                String?               // monthly, quarterly, yearly
+  date                  DateTime
+  notes                 String?               @db.Text
+  createdAt             DateTime              @default(now())
+  
+  business              Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  
+  @@unique([businessId, metricType, date])
+  @@index([businessId])
+  @@index([metricType])
+}
+
+model BusinessKeyword {
+  id                    String                @id @default(cuid())
+  businessId            String
+  keyword               String
+  relevance             Int                   @default(1)  // 1-10 relevance score
+  
+  business              Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  
+  @@unique([businessId, keyword])
+  @@index([businessId])
+  @@index([keyword])
+}
+
+enum ListingStatus {
+  DRAFT
+  PENDING_REVIEW
+  ACTIVE
+  UNDER_OFFER
+  UNDER_CONTRACT
+  DUE_DILIGENCE
+  SOLD
+  WITHDRAWN
+  EXPIRED
+}
+
+enum ListingType {
+  STANDARD
+  PREMIUM
+  EXCLUSIVE
+  AUCTION
+  TENDER
+}
+
+enum LegalStructure {
+  SOLE_TRADER
+  PARTNERSHIP
+  LLP
+  LTD
+  PLC
+  CHARITY
+  OTHER
+}
+
+model FinancialData {
+  id                    String                @id @default(cuid())
+  businessId            String
+  year                  Int
+  month                 Int?                  // For monthly data
+  
+  // Revenue & Profitability
+  revenue               Decimal               @db.Decimal(15, 2)
+  grossProfit           Decimal               @db.Decimal(15, 2)
+  operatingProfit       Decimal               @db.Decimal(15, 2)
+  netProfit             Decimal               @db.Decimal(15, 2)
+  ebitda                Decimal?              @db.Decimal(15, 2)
+  
+  // Expenses
+  cogs                  Decimal?              @db.Decimal(15, 2)  // Cost of goods sold
+  operatingExpenses     Decimal?              @db.Decimal(15, 2)
+  salaries              Decimal?              @db.Decimal(15, 2)
+  rent                  Decimal?              @db.Decimal(15, 2)
+  marketing             Decimal?              @db.Decimal(15, 2)
+  otherExpenses         Decimal?              @db.Decimal(15, 2)
+  
+  // Balance Sheet Items
+  assets                Decimal?              @db.Decimal(15, 2)
+  liabilities           Decimal?              @db.Decimal(15, 2)
+  equity                Decimal?              @db.Decimal(15, 2)
+  workingCapital        Decimal?              @db.Decimal(15, 2)
+  
+  // Verification
+  verified              Boolean               @default(false)
+  verifiedBy            String?               // Accountant/auditor name
+  verifiedAt            DateTime?
+  documentUrl           String?               // Link to supporting document
+  
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  
+  business              Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  
+  @@unique([businessId, year, month])
+  @@index([businessId])
+  @@index([year])
+}
+
+// ============================================================================
+// VALUATION SYSTEM
+// ============================================================================
+
+model Valuation {
+  id                    String                @id @default(cuid())
+  businessId            String
+  requestedBy           String
+  valuationType         ValuationType
+  
+  // Valuation Inputs
+  revenue               Decimal               @db.Decimal(15, 2)
+  profit                Decimal               @db.Decimal(15, 2)
+  ebitda                Decimal               @db.Decimal(15, 2)
+  assets                Decimal?              @db.Decimal(15, 2)
+  industryMultiple      Decimal               @db.Decimal(5, 2)
+  
+  // Valuation Results
+  assetValue            Decimal?              @db.Decimal(15, 2)
+  earningsValue         Decimal?              @db.Decimal(15, 2)
+  revenueValue          Decimal?              @db.Decimal(15, 2)
+  dcfValue              Decimal?              @db.Decimal(15, 2)  // Discounted cash flow
+  
+  finalValuation        Decimal               @db.Decimal(15, 2)
+  valuationRange        Json?                 // {min: x, max: y, confidence: z}
+  methodology           String                @db.Text
+  assumptions           Json?                 // Key assumptions used
+  comparables           Json?                 // Comparable companies/transactions
+  
+  // AI Analysis
+  aiScore               Decimal?              @db.Decimal(5, 2)  // AI confidence score
+  aiInsights            String?               @db.Text
+  riskFactors           String[]
+  opportunities         String[]
+  
+  status                ValuationStatus       @default(PENDING)
+  validUntil            DateTime
+  reportUrl             String?               // PDF report location
+  
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  
+  business              Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  history               ValuationHistory[]
+  
+  @@index([businessId])
+  @@index([status])
+  @@index([requestedBy])
+}
+
+model ValuationHistory {
+  id                    String                @id @default(cuid())
+  valuationId           String
+  previousValue         Decimal               @db.Decimal(15, 2)
+  newValue              Decimal               @db.Decimal(15, 2)
+  changeReason          String
+  changedBy             String
+  changedAt             DateTime              @default(now())
+  
+  valuation             Valuation             @relation(fields: [valuationId], references: [id], onDelete: Cascade)
+  
+  @@index([valuationId])
+}
+
+model ValuationRequest {
+  id                    String                @id @default(cuid())
+  businessId            String?
+  userId                String
+  
+  // Business Information
+  businessType          String
+  revenue               Decimal               @db.Decimal(15, 2)
+  profit                Decimal               @db.Decimal(15, 2)
+  industry              String
+  location              String
+  yearEstablished       Int?
+  employees             Int?
+  
+  // Additional Details
+  details               String?               @db.Text
+  urgency               RequestUrgency        @default(STANDARD)
+  
+  // Results
+  status                ValuationStatus       @default(PENDING)
+  estimatedValue        Decimal?              @db.Decimal(15, 2)
+  valuationRange        Json?                 // {min: x, max: y}
+  report                String?               @db.Text
+  completedAt           DateTime?
+  
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  
+  user                  User                  @relation(fields: [userId], references: [id])
+  
+  @@index([userId])
+  @@index([businessId])
+  @@index([status])
+}
+
+enum ValuationType {
+  QUICK_ESTIMATE
+  STANDARD
+  DETAILED
+  PROFESSIONAL
+  CERTIFIED
+}
+
+enum ValuationStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  EXPIRED
+  CANCELLED
+}
+
+enum RequestUrgency {
+  LOW
+  STANDARD
+  HIGH
+  URGENT
+}
+
+// ============================================================================
+// MATCHING SYSTEM
+// ============================================================================
+
+model Match {
+  id                    String                @id @default(cuid())
+  businessId            String
+  buyerId               String
+  sellerId              String
+  
+  // Match Quality
+  matchScore            Decimal               @db.Decimal(5, 2)  // 0-100 score
+  matchFactors          Json                  // Detailed factors that led to match
+  aiRecommended         Boolean               @default(false)
+  aiConfidence          Decimal?              @db.Decimal(5, 2)
+  
+  // Match Criteria Met
+  budgetMatch           Boolean               @default(false)
+  industryMatch         Boolean               @default(false)
+  locationMatch         Boolean               @default(false)
+  sizeMatch             Boolean               @default(false)
+  
+  // Status & Engagement
+  status                MatchStatus           @default(PENDING)
+  buyerInterest         InterestLevel?
+  sellerInterest        InterestLevel?
+  buyerViewedAt         DateTime?
+  sellerViewedAt        DateTime?
+  introducedAt          DateTime?
+  rejectedAt            DateTime?
+  rejectionReason       String?
+  
+  // Outcome
+  ledToInquiry          Boolean               @default(false)
+  ledToDealRoom         Boolean               @default(false)
+  ledToSale             Boolean               @default(false)
+  
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  expiresAt             DateTime?
+  
+  business              Business              @relation(fields: [businessId], references: [id])
+  buyer                 User                  @relation("BuyerMatches", fields: [buyerId], references: [id])
+  seller                User                  @relation("SellerMatches", fields: [sellerId], references: [id])
+  
+  @@unique([businessId, buyerId])
+  @@index([businessId])
+  @@index([buyerId])
+  @@index([sellerId])
+  @@index([status])
+  @@index([matchScore])
+}
+
+enum MatchStatus {
+  PENDING
+  VIEWED
+  INTERESTED
+  NOT_INTERESTED
+  IN_DISCUSSION
+  EXPIRED
+}
+
+enum InterestLevel {
+  LOW
+  MEDIUM
+  HIGH
+  VERY_HIGH
+}
+
+// ============================================================================
+// DEAL ROOM
+// ============================================================================
+
+model DealRoom {
+  id                    String                @id @default(cuid())
+  businessId            String
+  referenceCode         String                @unique
+  name                  String
+  
+  // Parties
+  sellerId              String
+  primaryBuyerId        String?               // Main buyer in negotiation
+  advisorId             String?               // M&A advisor managing the deal
+  
+  // Deal Information
+  dealType              DealType              @default(ACQUISITION)
+  dealValue             Decimal?              @db.Decimal(15, 2)
+  agreedPrice           Decimal?              @db.Decimal(15, 2)
+  depositAmount         Decimal?              @db.Decimal(15, 2)
+  
+  // Status & Timeline
+  status                DealRoomStatus        @default(ACTIVE)
+  stage                 DealStage             @default(INITIAL_DISCUSSION)
+  
+  // Important Dates
+  ndaSignedDate         DateTime?
+  loiDate               DateTime?             // Letter of Intent date
+  dueDiligenceStart     DateTime?
+  dueDiligenceEnd       DateTime?
+  expectedClosing       DateTime?
+  actualClosing         DateTime?
+  
+  // Access Control
+  isLocked              Boolean               @default(false)
+  lockedAt              DateTime?
+  lockedBy              String?
+  
+  // Metrics
+  documentsCount        Int                   @default(0)
+  totalViews            Int                   @default(0)
+  lastActivityAt        DateTime?
+  
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  closedAt              DateTime?
+  
+  // Relations
+  business              Business              @relation(fields: [businessId], references: [id])
+  advisor               AdvisorProfile?       @relation("AdvisorDealRooms", fields: [advisorId], references: [id])
+  access                DealRoomAccess[]
+  documents             DealRoomDocument[]
+  activities            DealRoomActivity[]
+  tasks                 DealRoomTask[]
+  milestones            DealRoomMilestone[]
+  
+  @@index([businessId])
+  @@index([sellerId])
+  @@index([primaryBuyerId])
+  @@index([status])
+  @@index([referenceCode])
+}
+
+model DealRoomAccess {
+  id                    String                @id @default(cuid())
+  dealRoomId            String
+  userId                String
+  role                  DealRoomRole
+  permissions           String[]              // read, write, delete, invite, manage
+  
+  // Access tracking
+  invitedBy             String?
+  invitedAt             DateTime              @default(now())
+  acceptedAt            DateTime?
+  lastAccessAt          DateTime?
+  accessCount           Int                   @default(0)
+  
+  // Restrictions
+  expiresAt             DateTime?
+  revokedAt             DateTime?
+  revokedBy             String?
+  revocationReason      String?
+  
+  dealRoom              DealRoom              @relation(fields: [dealRoomId], references: [id], onDelete: Cascade)
+  user                  User                  @relation(fields: [userId], references: [id])
+  
+  @@unique([dealRoomId, userId])
+  @@index([dealRoomId])
+  @@index([userId])
+}
+
+model DealRoomDocument {
+  id                    String                @id @default(cuid())
+  dealRoomId            String
+  documentId            String
+  
+  // Document organization
+  folderId              String?
+  folderPath            String?               // e.g., "/due-diligence/financial/"
+  order                 Int                   @default(0)
+  
+  // Visibility
+  visibleTo             DealRoomRole[]        // Which roles can see this
+  requiresNda           Boolean               @default(true)
+  
+  // Tracking
+  addedBy               String
+  addedAt               DateTime              @default(now())
+  
+  dealRoom              DealRoom              @relation(fields: [dealRoomId], references: [id], onDelete: Cascade)
+  document              Document              @relation(fields: [documentId], references: [id])
+  
+  @@unique([dealRoomId, documentId])
+  @@index([dealRoomId])
+  @@index([documentId])
+}
+
+model DealRoomActivity {
+  id                    String                @id @default(cuid())
+  dealRoomId            String
+  userId                String
+  activityType          String                // document_uploaded, user_invited, price_updated, etc.
+  description           String
+  metadata              Json?                 // Additional activity data
+  ipAddress             String?
+  createdAt             DateTime              @default(now())
+  
+  dealRoom              DealRoom              @relation(fields: [dealRoomId], references: [id], onDelete: Cascade)
+  
+  @@index([dealRoomId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model DealRoomTask {
+  id                    String                @id @default(cuid())
+  dealRoomId            String
+  title                 String
+  description           String?               @db.Text
+  assignedTo            String?
+  dueDate               DateTime?
+  priority              TaskPriority          @default(MEDIUM)
+  status                TaskStatus            @default(PENDING)
+  completedAt           DateTime?
+  completedBy           String?
+  createdBy             String
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  
+  dealRoom              DealRoom              @relation(fields: [dealRoomId], references: [id], onDelete: Cascade)
+  
+  @@index([dealRoomId])
+  @@index([assignedTo])
+  @@index([status])
+}
+
+model DealRoomMilestone {
+  id                    String                @id @default(cuid())
+  dealRoomId            String
+  title                 String
+  description           String?               @db.Text
+  targetDate            DateTime
+  completedDate         DateTime?
+  status                MilestoneStatus       @default(PENDING)
+  order                 Int
+  createdAt             DateTime              @default(now())
+  
+  dealRoom              DealRoom              @relation(fields: [dealRoomId], references: [id], onDelete: Cascade)
+  
+  @@index([dealRoomId])
+}
+
+enum DealType {
+  ACQUISITION
+  MERGER
+  ASSET_PURCHASE
+  SHARE_PURCHASE
+  MANAGEMENT_BUYOUT
+  INVESTMENT
+}
+
+enum DealRoomStatus {
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  TERMINATED
+  ARCHIVED
+}
+
+enum DealStage {
+  INITIAL_DISCUSSION
+  NDA_SIGNED
+  INFORMATION_EXCHANGE
+  INITIAL_OFFER
+  NEGOTIATION
+  LOI_SIGNED
+  DUE_DILIGENCE
+  FINAL_NEGOTIATION
+  CLOSING
+  POST_CLOSING
+}
+
+enum DealRoomRole {
+  OWNER
+  BUYER
+  SELLER
+  ADVISOR
+  LAWYER
+  ACCOUNTANT
+  VIEWER
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum MilestoneStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  MISSED
+}
+
+// ============================================================================
+// DOCUMENTS & MEDIA
+// ============================================================================
+
+model Document {
+  id                    String                @id @default(cuid())
+  businessId            String?
+  uploadedBy            String
+  
+  // File Information
+  name                  String
+  originalName          String
+  type                  DocumentType
+  mimeType              String
+  url                   String                // Cloud storage URL
+  size                  Int                   // File size in bytes
+  checksum              String?               // For integrity verification
+  
+  // Categorization
+  category              DocumentCategory
+  tags                  String[]
+  
+  // Versioning
+  version               Int                   @default(1)
+  parentDocumentId      String?               // Previous version reference
+  
+  // Security & Access
+  isConfidential        Boolean               @default(false)
+  requiresNda           Boolean               @default(false)
+  encryptionKey         String?               // For client-side encryption
+  
+  // Metadata
+  extractedText         String?               @db.Text  // For searchability
+  pageCount             Int?
+  metadata              Json?                 // Additional file metadata
+  
+  // Verification
+  verified              Boolean               @default(false)
+  verifiedBy            String?
+  verifiedAt            DateTime?
+  
+  // Dates
+  uploadedAt            DateTime              @default(now())
+  lastAccessedAt        DateTime?
+  expiresAt             DateTime?
+  deletedAt             DateTime?             // Soft delete
+  
+  // Relations
+  business              Business?             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  dealRoomDocuments     DealRoomDocument[]
+  documentAccess        DocumentAccess[]
+  documentVersions      Document[]            @relation("DocumentVersions")
+  parentDocument        Document?             @relation("DocumentVersions", fields: [parentDocumentId], references: [id])
+  
+  @@index([businessId])
+  @@index([uploadedBy])
+  @@index([type])
+  @@index([category])
+  @@index([deletedAt])
+}
+
+model DocumentAccess {
+  id                    String                @id @default(cuid())
+  documentId            String
+  userId                String
+  permission            DocumentPermission
+  grantedBy             String
+  grantedAt             DateTime              @default(now())
+  expiresAt             DateTime?
+  lastAccessedAt        DateTime?
+  accessCount           Int                   @default(0)
+  
+  document              Document              @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user                  User                  @relation(fields: [userId], references: [id])
+  
+  @@unique([documentId, userId])
+  @@index([documentId])
+  @@index([userId])
+}
+
+enum DocumentType {
+  FINANCIAL_STATEMENT
+  TAX_RETURN
+  BANK_STATEMENT
+  LEASE_AGREEMENT
+  INVENTORY_LIST
+  EQUIPMENT_LIST
+  CUSTOMER_LIST
+  SUPPLIER_CONTRACT
+  EMPLOYEE_CONTRACT
+  INSURANCE_POLICY
+  LEGAL_DOCUMENT
+  PATENT
+  TRADEMARK
+  LICENSE
+  CERTIFICATE
+  BUSINESS_PLAN
+  MARKETING_MATERIAL
+  PROPERTY_DEED
+  ENVIRONMENTAL_REPORT
+  OTHER
+}
+
+enum DocumentCategory {
+  FINANCIAL
+  LEGAL
+  OPERATIONAL
+  MARKETING
+  HR
+  PROPERTY
+  INTELLECTUAL_PROPERTY
+  COMPLIANCE
+  OTHER
+}
+
+enum DocumentPermission {
+  VIEW
+  DOWNLOAD
+  EDIT
+  DELETE
+  SHARE
+}
+
+model BusinessImage {
+  id                    String                @id @default(cuid())
+  businessId            String
+  url                   String
+  thumbnailUrl          String?
+  caption               String?
+  altText               String?
+  isPrimary             Boolean               @default(false)
+  isPublic              Boolean               @default(true)  // Show before NDA
+  order                 Int                   @default(0)
+  width                 Int?
+  height                Int?
+  size                  Int?                  // File size in bytes
+  createdAt             DateTime              @default(now())
+  
+  business              Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  
+  @@index([businessId])
+  @@index([order])
+}
+
+// ============================================================================
+// COMMUNICATION SYSTEM
+// ============================================================================
+
+model Inquiry {
+  id                    String                @id @default(cuid())
+  businessId            String
+  userId                String
+  
+  // Inquiry Details
+  subject               String
+  message               String                @db.Text
+  budget                Decimal?              @db.Decimal(15, 2)
+  timeframe             String?
+  financingStatus       String?
+  
+  // Contact Information
+  phone                 String?
+  preferredContact      String?               // email, phone, platform
+  bestTimeToCall        String?
+  
+  // Status
+  status                InquiryStatus         @default(PENDING)
+  priority              InquiryPriority       @default(NORMAL)
+  assignedTo            String?               // Staff member handling
+  
+  // Tracking
+  readAt                DateTime?
+  respondedAt           DateTime?
+  responseTime          Int?                  // Minutes to first response
+  
+  // Outcome
+  outcome               InquiryOutcome?
+  outcomeNotes          String?               @db.Text
+  leadQuality           Int?                  // 1-5 rating
+  
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  
+  business              Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user                  User                  @relation(fields: [userId], references: [id])
+  messages              Message[]
+  
+  @@index([businessId])
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Message {
+  id                    String                @id @default(cuid())
+  inquiryId             String
+  userId                String
+  content               String                @db.Text
+  attachments           String[]              // URLs to attachments
+  
+  // Status
+  isRead                Boolean               @default(false)
+  readAt                DateTime?
+  edited                Boolean               @default(false)
+  editedAt              DateTime?
+  
+  createdAt             DateTime              @default(now())
+  
+  inquiry               Inquiry               @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+  user                  User                  @relation(fields: [userId], references: [id])
+  
+  @@index([inquiryId])
+  @@index([userId])
+  @@index([isRead])
+}
+
+model DirectMessage {
+  id                    String                @id @default(cuid())
+  senderId              String
+  receiverId            String
+  subject               String?
+  content               String                @db.Text
+  attachments           String[]
+  
+  // Status
+  isRead                Boolean               @default(false)
+  readAt                DateTime?
+  isArchived            Boolean               @default(false)
+  isDeleted             Boolean               @default(false)
+  
+  // Thread Management
+  threadId              String?               // For conversation threading
+  replyToId             String?               // Reply to specific message
+  
+  createdAt             DateTime              @default(now())
+  
+  sender                User                  @relation("SentMessages", fields: [senderId], references: [id])
+  receiver              User                  @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([threadId])
+  @@index([isRead])
+}
+
+enum InquiryStatus {
+  PENDING
+  READ
+  RESPONDED
+  IN_DISCUSSION
+  QUALIFIED
+  NOT_QUALIFIED
+  CLOSED
+}
+
+enum InquiryPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum InquiryOutcome {
+  PROCEEDED_TO_NDA
+  PROCEEDED_TO_DEAL_ROOM
+  NOT_INTERESTED
+  NOT_QUALIFIED
+  NO_RESPONSE
+  OTHER
+}
+
+// ============================================================================
+// NOTIFICATIONS
+// ============================================================================
+
+model Notification {
+  id                    String                @id @default(cuid())
+  userId                String
+  type                  NotificationType
+  title                 String
+  message               String                @db.Text
+  
+  // Context
+  entityType            String?               // business, inquiry, dealRoom, etc.
+  entityId              String?               // ID of related entity
+  actionUrl             String?               // Link to relevant page
+  
+  // Delivery
+  channels              String[]              // email, sms, push, in-app
+  emailSent             Boolean               @default(false)
+  smsSent               Boolean               @default(false)
+  pushSent              Boolean               @default(false)
+  
+  // Status
+  isRead                Boolean               @default(false)
+  readAt                DateTime?
+  isArchived            Boolean               @default(false)
+  
+  // Priority
+  priority              NotificationPriority  @default(NORMAL)
+  expiresAt             DateTime?
+  
+  createdAt             DateTime              @default(now())
+  
+  user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([isRead])
+  @@index([type])
+  @@index([createdAt])
+}
+
+enum NotificationType {
+  // Inquiries
+  NEW_INQUIRY
+  INQUIRY_RESPONSE
+  INQUIRY_UPDATE
+  
+  // Listings
+  LISTING_APPROVED
+  LISTING_REJECTED
+  LISTING_EXPIRING
+  LISTING_EXPIRED
+  LISTING_VIEW_MILESTONE
+  
+  // Matches
+  NEW_MATCH
+  MATCH_ACCEPTED
+  MATCH_REJECTED
+  
+  // Deal Room
+  DEAL_ROOM_INVITE
+  DEAL_ROOM_DOCUMENT
+  DEAL_ROOM_UPDATE
+  DEAL_ROOM_TASK
+  
+  // Financial
+  PAYMENT_RECEIVED
+  PAYMENT_FAILED
+  SUBSCRIPTION_EXPIRING
+  
+  // System
+  SYSTEM_ANNOUNCEMENT
+  SECURITY_ALERT
+  PROFILE_UPDATE
+  
+  // Other
+  PRICE_CHANGE
+  NEW_MESSAGE
+  DOCUMENT_SHARED
+  NDA_SIGNED
+  VALUATION_COMPLETE
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+  CRITICAL
+}
+
+// ============================================================================
+// SEARCH & FAVORITES
+// ============================================================================
+
+model SavedSearch {
+  id                    String                @id @default(cuid())
+  userId                String
+  name                  String
+  description           String?
+  
+  // Search Criteria (stored as JSON for flexibility)
+  criteria              Json
+  
+  // Alert Settings
+  emailAlert            Boolean               @default(false)
+  pushAlert             Boolean               @default(false)
+  alertFrequency        AlertFrequency?
+  lastAlertSent         DateTime?
+  alertsEnabled         Boolean               @default(true)
+  
+  // Tracking
+  searchCount           Int                   @default(0)
+  lastSearched          DateTime?
+  resultsCount          Int                   @default(0)
+  
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  
+  user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([alertsEnabled])
+}
+
+model FavoriteListing {
+  id                    String                @id @default(cuid())
+  userId                String
+  businessId            String
+  notes                 String?               @db.Text
+  rating                Int?                  // Personal rating 1-5
+  tags                  String[]              // Personal tags
+  
+  // Tracking
+  addedAt               DateTime              @default(now())
+  lastViewedAt          DateTime?
+  viewCount             Int                   @default(0)
+  
+  // Alerts
+  priceAlerts           Boolean               @default(false)
+  statusAlerts          Boolean               @default(false)
+  
+  user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business              Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, businessId])
+  @@index([userId])
+  @@index([businessId])
+}
+
+enum AlertFrequency {
+  INSTANT
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+// ============================================================================
+// NDA & LEGAL
+// ============================================================================
+
+model NDASignature {
+  id                    String                @id @default(cuid())
+  userId                String
+  businessId            String
+  
+  // Signature Details
+  signedName            String
+  signedTitle           String?
+  signedCompany         String?
+  signatureData         String?               // Digital signature data
+  
+  // Agreement Details
+  ndaVersion            String                // Version of NDA signed
+  ndaText               String                @db.Text
+  termsAccepted         Boolean
+  
+  // Verification
+  ipAddress             String
+  userAgent             String?
+  verificationMethod    String?               // email, sms, docusign, etc.
+  verified              Boolean               @default(false)
+  
+  // Validity
+  validFrom             DateTime              @default(now())
+  validUntil            DateTime
+  revoked               Boolean               @default(false)
+  revokedAt             DateTime?
+  revokedReason         String?
+  
+  signedAt              DateTime              @default(now())
+  
+  user                  User                  @relation(fields: [userId], references: [id])
+  business              Business              @relation(fields: [businessId], references: [id])
+  
+  @@unique([userId, businessId])
+  @@index([userId])
+  @@index([businessId])
+  @@index([validUntil])
+}
+
+// ============================================================================
+// REVIEWS & RATINGS
+// ============================================================================
+
+model Review {
+  id                    String                @id @default(cuid())
+  authorId              String
+  targetId              String                // User being reviewed
+  dealRoomId            String?               // Associated deal if applicable
+  
+  // Ratings (1-5 scale)
+  overallRating         Int
+  communicationRating   Int?
+  professionalismRating Int?
+  responsivenessRating  Int?
+  trustworthinessRating Int?
+  
+  // Review Content
+  title                 String?
+  comment               String                @db.Text
+  wouldRecommend        Boolean
+  
+  // Verification
+  verified              Boolean               @default(false)  // Verified transaction
+  verifiedDeal          Boolean               @default(false)
+  
+  // Status
+  status                ReviewStatus          @default(PENDING)
+  moderatedAt           DateTime?
+  moderatedBy           String?
+  moderationNotes       String?
+  
+  // Response
+  responseText          String?               @db.Text
+  responseDate          DateTime?
+  
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  
+  author                User                  @relation("ReviewAuthor", fields: [authorId], references: [id])
+  target                User                  @relation("ReviewTarget", fields: [targetId], references: [id])
+  
+  @@index([authorId])
+  @@index([targetId])
+  @@index([status])
+  @@index([overallRating])
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  FLAGGED
+}
+
+// ============================================================================
+// SUBSCRIPTION & PAYMENTS
+// ============================================================================
+
+model Subscription {
+  id                    String                @id @default(cuid())
+  userId                String
+  
+  // Plan Details
+  planId                String
+  planName              String
+  planType              SubscriptionPlan
+  
+  // Billing
+  amount                Decimal               @db.Decimal(10, 2)
+  currency              String                @default("GBP")
+  interval              BillingInterval
+  
+  // Status
+  status                SubscriptionStatus
+  currentPeriodStart    DateTime
+  currentPeriodEnd      DateTime
+  trialEnd              DateTime?
+  
+  // Payment Method
+  paymentMethodId       String?
+  lastPaymentDate       DateTime?
+  nextPaymentDate       DateTime?
+  
+  // Limits
+  listingsLimit         Int?
+  featuredListings      Int?
+  dealRoomsLimit        Int?
+  
+  // Stripe/Payment Provider
+  stripeSubscriptionId  String?               @unique
+  stripeCustomerId      String?
+  
+  // Dates
+  startedAt             DateTime              @default(now())
+  canceledAt            DateTime?
+  endedAt               DateTime?
+  
+  user                  User                  @relation(fields: [userId], references: [id])
+  payments              Payment[]
+  
+  @@index([userId])
+  @@index([status])
+  @@index([stripeSubscriptionId])
+}
+
+model Payment {
+  id                    String                @id @default(cuid())
+  userId                String
+  subscriptionId        String?
+  
+  // Payment Details
+  amount                Decimal               @db.Decimal(10, 2)
+  currency              String                @default("GBP")
+  description           String
+  
+  // Status
+  status                PaymentStatus
+  failureReason         String?
+  
+  // Payment Method
+  paymentMethod         String?               // card, bank_transfer, etc.
+  last4                 String?               // Last 4 digits of card
+  
+  // Provider Details
+  stripePaymentIntentId String?               @unique
+  stripeChargeId        String?               @unique
+  receiptUrl            String?
+  invoiceUrl            String?
+  
+  // Dates
+  paidAt                DateTime?
+  failedAt              DateTime?
+  refundedAt            DateTime?
+  createdAt             DateTime              @default(now())
+  
+  user                  User                  @relation(fields: [userId], references: [id])
+  subscription          Subscription?         @relation(fields: [subscriptionId], references: [id])
+  
+  @@index([userId])
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([stripePaymentIntentId])
+}
+
+enum SubscriptionPlan {
+  FREE
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+  CUSTOM
+}
+
+enum BillingInterval {
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  UNPAID
+  INCOMPLETE
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+// ============================================================================
+// AUDIT & ACTIVITY LOGGING
+// ============================================================================
+
+model AuditLog {
+  id                    String                @id @default(cuid())
+  userId                String?
+  
+  // Action Details
+  action                String                // create, update, delete, view, etc.
+  entityType            String                // User, Business, Document, etc.
+  entityId              String
+  
+  // Changes
+  oldValues             Json?                 // Previous state
+  newValues             Json?                 // New state
+  changes               Json?                 // Specific changes made
+  
+  // Context
+  ipAddress             String?
+  userAgent             String?
+  sessionId             String?
+  requestId             String?               // For tracking related actions
+  
+  // Additional Info
+  reason                String?               // Why the action was taken
+  metadata              Json?                 // Any additional context
+  
+  createdAt             DateTime              @default(now())
+  
+  user                  User?                 @relation(fields: [userId], references: [id])
+  
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model ActivityLog {
+  id                    String                @id @default(cuid())
+  userId                String
+  
+  // Activity Details
+  activityType          String                // login, search, view_listing, etc.
+  description           String
+  
+  // Context
+  entityType            String?               // Related entity type
+  entityId              String?               // Related entity ID
+  
+  // Metadata
+  metadata              Json?                 // Additional activity data
+  ipAddress             String?
+  userAgent             String?
+  device                String?               // desktop, mobile, tablet
+  browser               String?
+  
+  // Location (for analytics)
+  country               String?
+  city                  String?
+  
+  createdAt             DateTime              @default(now())
+  
+  user                  User                  @relation(fields: [userId], references: [id])
+  
+  @@index([userId])
+  @@index([activityType])
+  @@index([createdAt])
+  @@index([entityType, entityId])
+}
+
+// ============================================================================
+// ANALYTICS & TRACKING
+// ============================================================================
+
+model PageView {
+  id                    String                @id @default(cuid())
+  sessionId             String
+  userId                String?
+  
+  // Page Information
+  url                   String
+  path                  String
+  title                 String?
+  referrer              String?
+  
+  // User Context
+  ipAddress             String?
+  userAgent             String?
+  device                String?
+  browser               String?
+  os                    String?
+  
+  // Location
+  country               String?
+  region                String?
+  city                  String?
+  
+  // Engagement
+  timeOnPage            Int?                  // Seconds
+  scrollDepth           Int?                  // Percentage
+  clicks                Int                   @default(0)
+  
+  // UTM Parameters
+  utmSource             String?
+  utmMedium             String?
+  utmCampaign           String?
+  utmTerm               String?
+  utmContent            String?
+  
+  createdAt             DateTime              @default(now())
+  
+  @@index([sessionId])
+  @@index([userId])
+  @@index([path])
+  @@index([createdAt])
+}
+
+model SearchLog {
+  id                    String                @id @default(cuid())
+  userId                String?
+  sessionId             String
+  
+  // Search Details
+  query                 String?
+  filters               Json                  // All applied filters
+  resultsCount          Int
+  clickedResults        String[]              // Business IDs clicked
+  
+  // Performance
+  searchTime            Int                   // Milliseconds
+  
+  createdAt             DateTime              @default(now())
+  
+  @@index([userId])
+  @@index([sessionId])
+  @@index([createdAt])
+}

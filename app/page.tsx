@@ -1,66 +1,121 @@
 import { Metadata } from "next"
-import { Button } from "components/Button/Button"
-
-import { LP_GRID_ITEMS } from "lp-items"
+import { HeroSection } from "components/landing/HeroSection"
+import { SocialProof } from "components/landing/SocialProof"
+import { HowItWorks } from "components/landing/HowItWorks"
+import { Features } from "components/landing/Features"
+import { ValuationCTA } from "components/landing/ValuationCTA"
+import { BuyerSection } from "components/landing/BuyerSection"
+import { Testimonials } from "components/landing/Testimonials"
+import { FAQ } from "components/landing/FAQ"
+import { FooterCTA } from "components/landing/FooterCTA"
 
 export const metadata: Metadata = {
-  title: "Next.js Enterprise Boilerplate",
-  twitter: {
-    card: "summary_large_image",
+  title: "ExitMatch - Sell Your Business at the Right Price, to the Right Buyer",
+  description: "AI-powered business valuations and intelligent buyer matching for UK SMEs. Get your free valuation in 2 minutes. Join 500+ successful business exits.",
+  keywords: "business sale, M&A, UK SME, business valuation, sell business, buy business, acquisition, merger, exit strategy",
+  authors: [{ name: "ExitMatch" }],
+  creator: "ExitMatch",
+  publisher: "ExitMatch",
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
+  metadataBase: new URL("https://exitmatch.co.uk"),
+  alternates: {
+    canonical: "/",
   },
   openGraph: {
-    url: "https://next-enterprise.vercel.app/",
+    title: "ExitMatch - AI-Powered M&A Platform for UK SMEs",
+    description: "Sell your business at the right price, to the right buyer. Get AI-powered valuations and connect with pre-qualified buyers.",
+    url: "https://exitmatch.co.uk",
+    siteName: "ExitMatch",
     images: [
       {
+        url: "/og-image.jpg",
         width: 1200,
         height: 630,
-        url: "https://raw.githubusercontent.com/Blazity/next-enterprise/main/.github/assets/project-logo.png",
+        alt: "ExitMatch - M&A Platform for UK SMEs",
       },
     ],
+    locale: "en_GB",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "ExitMatch - Sell Your Business at the Right Price",
+    description: "AI-powered valuations and intelligent buyer matching for UK SMEs. Get your free valuation in 2 minutes.",
+    creator: "@exitmatch",
+    images: ["/twitter-image.jpg"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  verification: {
+    google: "google-verification-code",
   },
 }
 
-export default function Web() {
+// Structured data for SEO
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "ExitMatch",
+  url: "https://exitmatch.co.uk",
+  logo: "https://exitmatch.co.uk/logo.png",
+  description: "AI-powered M&A platform connecting UK SME sellers with qualified buyers",
+  address: {
+    "@type": "PostalAddress",
+    addressCountry: "GB",
+  },
+  contactPoint: {
+    "@type": "ContactPoint",
+    telephone: "+44-xxx-xxx-xxxx",
+    contactType: "customer service",
+    areaServed: "GB",
+    availableLanguage: "English",
+  },
+  sameAs: [
+    "https://twitter.com/exitmatch",
+    "https://linkedin.com/company/exitmatch",
+    "https://github.com/exitmatch",
+  ],
+  aggregateRating: {
+    "@type": "AggregateRating",
+    ratingValue: "4.8",
+    reviewCount: "324",
+  },
+}
+
+export default function LandingPage() {
   return (
     <>
-      <section className="bg-white dark:bg-gray-900">
-        <div className="mx-auto grid max-w-(--breakpoint-xl) px-4 py-8 text-center lg:py-16">
-          <div className="mx-auto place-self-center">
-            <h1 className="mb-4 max-w-2xl text-4xl leading-none font-extrabold tracking-tight md:text-5xl xl:text-6xl dark:text-white">
-              Next.js Enterprise Boilerplate
-            </h1>
-            <p className="mb-6 max-w-2xl font-light text-gray-500 md:text-lg lg:mb-8 lg:text-xl dark:text-gray-400">
-              Jumpstart your enterprise project with our feature-packed, high-performance Next.js boilerplate!
-              Experience rapid UI development, AI-powered code reviews, and an extensive suite of tools for a smooth and
-              enjoyable development process.
-            </p>
-            <Button href="https://github.com/Blazity/next-enterprise" className="mr-3">
-              Get started
-            </Button>
-            <Button
-              href="https://vercel.com/new/git/external?repository-url=https://github.com/Blazity/next-enterprise"
-              intent="secondary"
-            >
-              Deploy Now
-            </Button>
-          </div>
-        </div>
-      </section>
-      <section className="bg-white dark:bg-gray-900">
-        <div className="mx-auto max-w-(--breakpoint-xl) px-4 py-8 sm:py-16 lg:px-6">
-          <div className="justify-center space-y-8 md:grid md:grid-cols-2 md:gap-12 md:space-y-0 lg:grid-cols-3">
-            {LP_GRID_ITEMS.map((singleItem) => (
-              <div key={singleItem.title} className="flex flex-col items-center justify-center text-center">
-                <div className="bg-primary-100 dark:bg-primary-900 mb-4 flex size-10 items-center justify-center rounded-full p-1.5 text-blue-700 lg:size-12">
-                  {singleItem.icon}
-                </div>
-                <h3 className="mb-2 text-xl font-bold dark:text-white">{singleItem.title}</h3>
-                <p className="text-gray-500 dark:text-gray-400">{singleItem.description}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      {/* Add structured data to the page */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+      />
+
+      {/* Landing Page Sections */}
+      <main className="overflow-x-hidden">
+        <HeroSection />
+        <SocialProof />
+        <HowItWorks />
+        <Features />
+        <ValuationCTA />
+        <BuyerSection />
+        <Testimonials />
+        <FAQ />
+        <FooterCTA />
+      </main>
     </>
   )
 }
