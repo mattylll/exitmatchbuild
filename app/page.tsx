@@ -95,7 +95,7 @@ const structuredData = {
   },
 }
 
-export default function LandingPage() {
+export default function Page() {
   return (
     <>
       {/* Add structured data to the page */}
@@ -104,7 +104,7 @@ export default function LandingPage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
       />
 
-      {/* Landing Page Sections */}
+      {/* ExitMatch Landing Page */}
       <main className="overflow-x-hidden">
         <HeroSection />
         <SocialProof />
