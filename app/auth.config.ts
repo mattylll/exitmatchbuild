@@ -1,17 +1,35 @@
 import type { NextAuthConfig } from 'next-auth'
-import { PrismaAdapter } from '@auth/prisma-adapter'
-import { PrismaClient } from '@prisma/client'
-import Credentials from 'next-auth/providers/credentials'
-import Google from 'next-auth/providers/google'
-import LinkedIn from 'next-auth/providers/linkedin'
-import bcrypt from 'bcryptjs'
 
-const prisma = new PrismaClient()
+// Demo mode check
+const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
+
+// Conditional imports for production mode
+let PrismaAdapter: any
+let PrismaClient: any
+let Credentials: any
+let Google: any
+let LinkedIn: any
+let bcrypt: any
+let prisma: any
+
+if (!isDemoMode) {
+  try {
+    PrismaAdapter = require('@auth/prisma-adapter').PrismaAdapter
+    PrismaClient = require('@prisma/client').PrismaClient
+    Credentials = require('next-auth/providers/credentials').default
+    Google = require('next-auth/providers/google').default
+    LinkedIn = require('next-auth/providers/linkedin').default
+    bcrypt = require('bcryptjs')
+    prisma = new PrismaClient()
+  } catch (error) {
+    console.log('Running in demo mode - database features disabled')
+  }
+}
 
 export const authConfig: NextAuthConfig = {
-  adapter: PrismaAdapter(prisma),
-  providers: [
-    Google({
+  ...(isDemoMode ? {} : { adapter: PrismaAdapter && prisma ? PrismaAdapter(prisma) : undefined }),
+  providers: isDemoMode ? [] : [
+    ...(Google && process.env.GOOGLE_CLIENT_ID ? [Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       profile(profile) {
@@ -23,8 +41,8 @@ export const authConfig: NextAuthConfig = {
           role: 'buyer' // Default role for OAuth users
         }
       }
-    }),
-    LinkedIn({
+    })] : []),
+    ...(LinkedIn && process.env.LINKEDIN_CLIENT_ID ? [LinkedIn({
       clientId: process.env.LINKEDIN_CLIENT_ID!,
       clientSecret: process.env.LINKEDIN_CLIENT_SECRET!,
       profile(profile) {
@@ -36,8 +54,8 @@ export const authConfig: NextAuthConfig = {
           role: 'buyer' // Default role for OAuth users
         }
       }
-    }),
-    Credentials({
+    })] : []),
+    ...(Credentials && prisma ? [Credentials({
       name: 'credentials',
       credentials: {
         email: { label: 'Email', type: 'email' },
@@ -78,7 +96,7 @@ export const authConfig: NextAuthConfig = {
           return null
         }
       }
-    })
+    })] : [])
   ],
   pages: {
     signIn: '/auth/login',

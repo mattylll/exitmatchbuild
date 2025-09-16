@@ -1,0 +1,43 @@
+name: exitmatch
+region: lon
+services:
+- build_command: npm install --legacy-peer-deps && npm run build
+  environment_slug: node-js
+  envs:
+  - key: NODE_ENV
+    scope: RUN_AND_BUILD_TIME
+    value: production
+  - key: NEXT_PUBLIC_DEMO_MODE
+    scope: RUN_AND_BUILD_TIME
+    value: "true"
+  - key: NEXT_PUBLIC_APP_URL
+    scope: RUN_AND_BUILD_TIME
+    value: ${APP_URL}
+  - key: NEXTAUTH_URL
+    scope: RUN_AND_BUILD_TIME
+    value: ${APP_URL}
+  - key: NEXTAUTH_SECRET
+    scope: RUN_AND_BUILD_TIME
+    value: demo-secret-not-for-production-use-32chars
+  - key: DATABASE_URL
+    scope: RUN_AND_BUILD_TIME
+    value: postgresql://user:password@localhost:5432/exitmatch
+  - key: NEXT_PUBLIC_ENABLE_ANALYTICS
+    scope: RUN_AND_BUILD_TIME
+    value: "false"
+  - key: NEXT_PUBLIC_ENABLE_3D_ANIMATIONS
+    scope: RUN_AND_BUILD_TIME
+    value: "false"
+  - key: RATE_LIMIT_ENABLED
+    scope: RUN_AND_BUILD_TIME
+    value: "false"
+  github:
+    branch: main
+    deploy_on_push: true
+    repo: mattylll/exitmatchbuild
+  http_port: 3000
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  name: web
+  run_command: npm start
+  source_dir: /
