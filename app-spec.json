@@ -1,0 +1,25 @@
+{
+  "name": "exitmatch-demo",
+  "region": "lon",
+  "services": [{
+    "name": "web",
+    "github": {
+      "repo": "mattylll/exitmatchbuild",
+      "branch": "main",
+      "deploy_on_push": true
+    },
+    "build_command": "npm ci && npm run build",
+    "run_command": "npm start",
+    "environment_slug": "node-js",
+    "instance_size_slug": "basic-xxs",
+    "instance_count": 1,
+    "http_port": 3000,
+    "envs": [
+      {"key": "NODE_ENV", "value": "production"},
+      {"key": "NEXT_TELEMETRY_DISABLED", "value": "1"},
+      {"key": "NEXTAUTH_URL", "value": "${APP_URL}"},
+      {"key": "NEXTAUTH_SECRET", "value": "demo-secret-2024"},
+      {"key": "NEXT_PUBLIC_APP_URL", "value": "${APP_URL}"}
+    ]
+  }]
+}
