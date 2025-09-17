@@ -7,7 +7,7 @@ import { motion } from 'framer-motion'
 import { 
   TrendingUp, 
   Calculator, 
-  ChartBar, 
+  BarChart3, 
   Shield,
   ArrowRight,
   CheckCircle,
@@ -112,7 +112,7 @@ export default function ValuationPage() {
 
           <div className="bg-white/5 backdrop-blur-sm rounded-xl p-6 border border-white/10">
             <div className="w-12 h-12 bg-gold-500/20 rounded-lg flex items-center justify-center mb-4">
-              <ChartBar className="w-6 h-6 text-gold-400" />
+              <BarChart3 className="w-6 h-6 text-gold-400" />
             </div>
             <h3 className="text-xl font-bold text-white mb-2">Industry Benchmarks</h3>
             <p className="text-gray-400">

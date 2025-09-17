@@ -9,7 +9,7 @@ import {
   TrendingUp,
   TrendingDown,
   AlertCircle,
-  ChartBar,
+  BarChart3,
   Building2,
   DollarSign,
   Users,
@@ -236,7 +236,7 @@ export default function InstantValuationPage() {
             <div className="grid md:grid-cols-2 gap-6 mb-8">
               <div className="bg-white/5 rounded-xl p-6">
                 <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                  <ChartBar className="w-5 h-5 text-gold-400" />
+                  <BarChart3 className="w-5 h-5 text-gold-400" />
                   EBITDA Multiple Analysis
                 </h3>
                 <div className="space-y-3">
