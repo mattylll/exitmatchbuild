@@ -18,8 +18,10 @@ import {
 export default function ValuationPage() {
   const [showWizard, setShowWizard] = useState(false)
 
+  // Redirect to instant valuation page
   if (showWizard) {
-    return <ValuationWizard />
+    window.location.href = '/valuation/instant'
+    return null
   }
 
   return (
